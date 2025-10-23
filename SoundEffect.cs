@@ -2,6 +2,7 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Timers;
 using Un4seen.Bass;
 using Timer = System.Timers.Timer;
@@ -195,6 +196,8 @@ public partial class MainWindow
                     }
         }
 
+        var openTouchHolds = new List<double>(); // list of time at end
+
         for (var i = 0; i < SimaiProcess.notelist.Count; i++)
         {
             var noteGroup = SimaiProcess.notelist[i];
@@ -337,21 +340,48 @@ public partial class MainWindow
                         stobj.hasAnswer = true;
                         stobj.hasTouch = true;
                         stobj.hasTouchHold = true;
+
                         // 计算TouchHold结尾
                         var targetTime = noteGroup.time + note.holdTime;
-                        var nearIndex = waitToBePlayed.FindIndex(o => Math.Abs(o.time - targetTime) < 0.001f);
-                        if (nearIndex != -1)
+                       
+                        // Add only if no same value exists
+                        var existingEndAtIndex = openTouchHolds.FindIndex(e => Math.Abs(e - targetTime) < 0.001f);
+                        if (existingEndAtIndex == -1)
                         {
-                            if (note.isHanabi) waitToBePlayed[nearIndex].hasHanabi = true;
-                            waitToBePlayed[nearIndex].hasAnswer = true;
-                            waitToBePlayed[nearIndex].hasTouchHoldEnd = true;
+                            openTouchHolds.Add(targetTime);
+                        }
+
+                        int getOpenThStartIndex(double time)
+                        {
+                            return openTouchHolds.FindLastIndex(endAt => endAt < time && time - endAt > 0.001f) + 1;
+                        }
+                        // clear unrelated touch holds
+                        var clearIndex = getOpenThStartIndex(noteGroup.time);
+                        openTouchHolds.RemoveRange(0, clearIndex);
+
+                        var nearStartIndex = waitToBePlayed.FindIndex(o => Math.Abs(o.time - noteGroup.time) < 0.001f);
+                        if (nearStartIndex != -1)
+                        {
+                            waitToBePlayed[nearStartIndex].hasTouchHoldEnd = openTouchHolds.Count < 2;
+                        }
+
+                        // get overlapped touch holds at end
+                        var openThCountAtEnd = openTouchHolds.Count - getOpenThStartIndex(targetTime);
+
+                        var nearEndIndex = waitToBePlayed.FindIndex(o => Math.Abs(o.time - targetTime) < 0.001f);
+                        if (nearEndIndex != -1)
+                        {
+                            if (note.isHanabi) waitToBePlayed[nearEndIndex].hasHanabi = true;
+                            waitToBePlayed[nearEndIndex].hasAnswer = true;
+                            waitToBePlayed[nearEndIndex].hasTouchHoldEnd = openThCountAtEnd < 2;
                         }
                         else
                         {
                             var tHoldRelease = new SoundEffectTiming(targetTime, true, _hasHanabi: note.isHanabi,
-                                _hasTouchHoldEnd: true);
+                            _hasTouchHoldEnd: openThCountAtEnd < 2);
                             waitToBePlayed.Add(tHoldRelease);
                         }
+
 
                         break;
                     }
@@ -374,7 +404,7 @@ public partial class MainWindow
             // 如果足够播完 那么就等到BGM结束再停止
             extraTime4AllPerfect = -1;
 
-        //Console.WriteLine(JsonConvert.SerializeObject(waitToBePlayed));
+        // Debug.WriteLine(JsonConvert.SerializeObject(waitToBePlayed));
     }
 
     private void renderSoundEffect(double delaySeconds)
