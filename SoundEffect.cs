@@ -2,7 +2,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
 using System.Timers;
 using Un4seen.Bass;
 using Timer = System.Timers.Timer;
