@@ -336,7 +336,8 @@ public partial class MainWindow
                     {
                         stobj.hasAnswer = true;
                         stobj.hasTouch = true;
-                        stobj.hasTouchHold = true;
+                        // Don't set hasTouchHold here - will be processed later
+                        
                         // 计算TouchHold结尾
                         var targetTime = noteGroup.time + note.holdTime;
                         var nearIndex = waitToBePlayed.FindIndex(o => Math.Abs(o.time - targetTime) < 0.001f);
@@ -344,12 +345,12 @@ public partial class MainWindow
                         {
                             if (note.isHanabi) waitToBePlayed[nearIndex].hasHanabi = true;
                             waitToBePlayed[nearIndex].hasAnswer = true;
-                            waitToBePlayed[nearIndex].hasTouchHoldEnd = true;
+                            // Don't set hasTouchHoldEnd here - will be processed later
                         }
                         else
                         {
-                            var tHoldRelease = new SoundEffectTiming(targetTime, true, _hasHanabi: note.isHanabi,
-                                _hasTouchHoldEnd: true);
+                            var tHoldRelease = new SoundEffectTiming(targetTime, true, _hasHanabi: note.isHanabi);
+                            // Don't set hasTouchHoldEnd here - will be processed later
                             waitToBePlayed.Add(tHoldRelease);
                         }
 
@@ -364,6 +365,82 @@ public partial class MainWindow
         }
 
         if (isOpIncluded) waitToBePlayed.Add(new SoundEffectTiming(GetAllPerfectStartTime(), _hasAllPerfect: true));
+        waitToBePlayed.Sort((o1, o2) => o1.time < o2.time ? -1 : 1);
+
+        // Post-process TouchHold events to handle overlapping holds correctly
+        // Step 1: Collect all TouchHold ranges from the note list
+        var touchHoldRanges = new List<(double start, double end)>();
+        for (var i = 0; i < SimaiProcess.notelist.Count; i++)
+        {
+            var noteGroup = SimaiProcess.notelist[i];
+            if (noteGroup.time < startTime) continue;
+            
+            var notes = noteGroup.getNotes();
+            foreach (var note in notes)
+            {
+                if (note.noteType == SimaiNoteType.TouchHold)
+                {
+                    var holdStart = noteGroup.time;
+                    var holdEnd = noteGroup.time + note.holdTime;
+                    touchHoldRanges.Add((holdStart, holdEnd));
+                }
+            }
+        }
+        
+        // Step 2: Sort ranges by start time
+        touchHoldRanges.Sort((a, b) => a.start.CompareTo(b.start));
+        
+        // Step 3: Merge overlapping ranges
+        var mergedRanges = new List<(double start, double end)>();
+        foreach (var range in touchHoldRanges)
+        {
+            if (mergedRanges.Count == 0)
+            {
+                mergedRanges.Add(range);
+            }
+            else
+            {
+                var last = mergedRanges[mergedRanges.Count - 1];
+                if (range.start <= last.end + 0.001) // Overlapping or adjacent
+                {
+                    // Extend the last range to cover both
+                    mergedRanges[mergedRanges.Count - 1] = (last.start, Math.Max(last.end, range.end));
+                }
+                else
+                {
+                    // Non-overlapping, add as new range
+                    mergedRanges.Add(range);
+                }
+            }
+        }
+        
+        // Step 4: Apply hasTouchHold and hasTouchHoldEnd flags based on merged ranges
+        foreach (var range in mergedRanges)
+        {
+            // Set hasTouchHold at the start of each merged range
+            var startIndex = waitToBePlayed.FindIndex(t => Math.Abs(t.time - range.start) < 0.001f);
+            if (startIndex != -1)
+            {
+                waitToBePlayed[startIndex].hasTouchHold = true;
+            }
+            else
+            {
+                waitToBePlayed.Add(new SoundEffectTiming(range.start, _hasTouchHold: true));
+            }
+            
+            // Set hasTouchHoldEnd at the end of each merged range
+            var endIndex = waitToBePlayed.FindIndex(t => Math.Abs(t.time - range.end) < 0.001f);
+            if (endIndex != -1)
+            {
+                waitToBePlayed[endIndex].hasTouchHoldEnd = true;
+            }
+            else
+            {
+                waitToBePlayed.Add(new SoundEffectTiming(range.end, _hasTouchHoldEnd: true));
+            }
+        }
+        
+        // Re-sort after potentially adding new timings
         waitToBePlayed.Sort((o1, o2) => o1.time < o2.time ? -1 : 1);
 
         var apTime = GetAllPerfectStartTime();
