@@ -121,8 +121,8 @@ public partial class MainWindow
                 if (se.hasTouch) Bass.BASS_ChannelPlay(touchStream, true);
                 if (se.hasHanabi) //may cause delay
                     Bass.BASS_ChannelPlay(hanabiStream, true);
-                if (se.hasTouchHold) Bass.BASS_ChannelPlay(holdRiserStream, true);
                 if (se.hasTouchHoldEnd) Bass.BASS_ChannelStop(holdRiserStream);
+                if (se.hasTouchHold) Bass.BASS_ChannelPlay(holdRiserStream, true);
                 if (se.hasSlide) Bass.BASS_ChannelPlay(slideStream, true);
                 if (se.hasBreakSlideStart) Bass.BASS_ChannelPlay(breakSlideStartStream, true);
                 if (se.hasBreakSlide) Bass.BASS_ChannelPlay(breakSlideStream, true);
@@ -401,7 +401,7 @@ public partial class MainWindow
             else
             {
                 var last = mergedRanges[mergedRanges.Count - 1];
-                if (range.start <= last.end + 0.001) // Overlapping or adjacent
+                if (range.start <= last.end - 0.001f) // Overlapping
                 {
                     // Extend the last range to cover both
                     mergedRanges[mergedRanges.Count - 1] = (last.start, Math.Max(last.end, range.end));
