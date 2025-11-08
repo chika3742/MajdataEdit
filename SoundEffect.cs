@@ -415,8 +415,11 @@ public partial class MainWindow
         }
         
         // Step 4: Apply hasTouchHold and hasTouchHoldEnd flags based on merged ranges
-        foreach (var range in mergedRanges)
+        for (var i = 0; i < mergedRanges.Count; i++)
         {
+            var range = mergedRanges[i];
+            var isLastRange = (i == mergedRanges.Count - 1);
+            
             // Set hasTouchHold at the start of each merged range
             var startIndex = waitToBePlayed.FindIndex(t => Math.Abs(t.time - range.start) < 0.001f);
             if (startIndex != -1)
@@ -433,10 +436,21 @@ public partial class MainWindow
             if (endIndex != -1)
             {
                 waitToBePlayed[endIndex].hasTouchHoldEnd = true;
+                // If this is the last range (all TouchHolds end here), also set hasTouchHold
+                if (isLastRange)
+                {
+                    waitToBePlayed[endIndex].hasTouchHold = true;
+                }
             }
             else
             {
-                waitToBePlayed.Add(new SoundEffectTiming(range.end, _hasTouchHoldEnd: true));
+                var newTiming = new SoundEffectTiming(range.end, _hasTouchHoldEnd: true);
+                // If this is the last range (all TouchHolds end here), also set hasTouchHold
+                if (isLastRange)
+                {
+                    newTiming.hasTouchHold = true;
+                }
+                waitToBePlayed.Add(newTiming);
             }
         }
         
